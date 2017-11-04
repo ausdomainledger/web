@@ -33,6 +33,7 @@ var (
 
 type queryResponse struct {
 	Results []queryResult `json:"results"`
+	Last    uint64        `json:"last"`
 }
 
 type queryResult struct {
@@ -40,6 +41,7 @@ type queryResult struct {
 	ETLD      string `json:"etld" db:"etld"`
 	FirstSeen int64  `json:"first_seen" db:"first_seen"`
 	LastSeen  int64  `json:"last_seen" db:"last_seen"`
+	Id        uint64 `json:"id" db:"id"`
 }
 
 type statsResponse struct {
@@ -101,9 +103,10 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	off, _ := strconv.Atoi(q.Get("offset"))
+	off, _ := strconv.Atoi(q.Get("from_time"))
+	last, _ := strconv.Atoi(q.Get("last_id"))
 
-	res, err := query(ctx, q.Get("query"), off, limit)
+	res, err := query(ctx, q.Get("query"), off, last, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -113,7 +116,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
-func query(ctx context.Context, qs string, offsetLastSeen int, limit int) (queryResponse, error) {
+func query(ctx context.Context, qs string, fromTime int, lastId int, limit int) (queryResponse, error) {
 	if limit == 0 || limit > 1000 {
 		limit = 1000
 	}
@@ -128,13 +131,10 @@ func query(ctx context.Context, qs string, offsetLastSeen int, limit int) (query
 	var out []queryResult
 
 	var err error
-	if offsetLastSeen > 0 {
-		// This will present overlapping results from the previous page
-		// but I don't want to add another sort key so
-		// they will have to be deduplicated at the frontend
-		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 AND last_seen <= $2 ORDER BY last_seen DESC LIMIT $3;", qs, offsetLastSeen, limit)
+	if fromTime > 0 && lastId > 0 {
+		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 AND last_seen <= $2 AND id < $4 ORDER BY last_seen DESC, id DESC LIMIT $3;", qs, fromTime, limit, lastId)
 	} else {
-		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 ORDER BY last_seen DESC LIMIT $2;", qs, limit)
+		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 ORDER BY last_seen DESC, id DESC LIMIT $2;", qs, limit)
 	}
 
 	if err != nil {
@@ -142,7 +142,14 @@ func query(ctx context.Context, qs string, offsetLastSeen int, limit int) (query
 		return queryResponse{}, errors.New("Query failed :(")
 	}
 
-	return queryResponse{Results: out}, nil
+	lowestId := ^uint64(0)
+	for _, v := range out {
+		if v.Id < lowestId {
+			lowestId = v.Id
+		}
+	}
+
+	return queryResponse{Results: out, Last: lowestId}, nil
 }
 
 func checkLimit(next http.Handler) http.Handler {
