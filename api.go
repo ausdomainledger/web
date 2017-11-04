@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -132,6 +133,8 @@ func query(ctx context.Context, qs string, fromTime int, lastId int, limit int) 
 	if len(qs) < 3 {
 		return queryResponse{}, errors.New("Query must be at least 3 characters")
 	}
+
+	qs = strings.ToLower(strings.TrimSpace(qs))
 
 	var out []queryResult
 
