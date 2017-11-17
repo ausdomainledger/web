@@ -140,11 +140,11 @@ func query(ctx context.Context, qs string, fromTime int, lastId int, limit int) 
 
 	var err error
 	if fromTime > 0 && lastId > 0 {
-		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 AND last_seen <= $2 AND id < $4 ORDER BY last_seen DESC, id DESC LIMIT $3;", qs, fromTime, limit, lastId)
+		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 AND last_seen <= $2 AND id < $4 ORDER BY first_seen DESC, last_seen DESC, id DESC LIMIT $3;", qs, fromTime, limit, lastId)
 	} else if lastId == 0 && fromTime > 0 {
-		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 AND last_seen <= $2 ORDER BY last_seen DESC, id DESC LIMIT $3;", qs, fromTime, limit)
+		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 AND last_seen <= $2 ORDER BY first_seen DESC, last_seen DESC, id DESC LIMIT $3;", qs, fromTime, limit)
 	} else {
-		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 ORDER BY last_seen DESC, id DESC LIMIT $2;", qs, limit)
+		err = db.SelectContext(ctx, &out, "SELECT * FROM domains WHERE domain LIKE $1 ORDER BY first_seen DESC, last_seen DESC, id DESC LIMIT $2;", qs, limit)
 	}
 
 	if err != nil {
@@ -179,7 +179,7 @@ func checkLimit(next http.Handler) http.Handler {
 
 func pollEtldCount() {
 	for {
-		if err := db.Get(&etldCount, "SELECT COUNT(DISTINCT etld) FROM domains"); err != nil {
+		if err := db.Get(&etldCount, "SELECT COUNT(*) FROM (SELECT DISTINCT etld FROM domains) AS temp;"); err != nil {
 			log.Printf("Failed to get etld count: %v", err)
 		}
 
