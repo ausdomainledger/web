@@ -76,7 +76,6 @@ func main() {
 		AllowedHeaders: []string{"Content-Type", "Accept"},
 		MaxAge:         300,
 	})
-	r.Use(middleware.CloseNotify)
 	r.Use(middleware.Timeout(10 * time.Second))
 	r.Use(xo.Handler)
 	r.Use(middleware.DefaultCompress)

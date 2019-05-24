@@ -6,7 +6,7 @@ clean:
 all: api 
 
 api:
-	go build api.go
+	GO111MODULE=on go build api.go
 
 deploy:
 	rsync -rvhz --progress api root@api.ausdomainledger.net:/root
